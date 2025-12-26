@@ -31,7 +31,26 @@ export const createOrder = async (req, res) => {
     }
 
     // Считаем общую сумму
-    const totalPrice = selectedProductsResult.rows.reduce((sum, item) => sum + item.price, 0);
+    // Получаем цену услуги
+const serviceResult = await pool.query(
+  "SELECT price::float AS price FROM services WHERE id = $1",
+  [serviceId]
+);
+
+if (!serviceResult.rows.length) {
+  return res.status(400).json({ status: "error", message: "Service not found" });
+}
+
+const basePrice = serviceResult.rows[0].price;
+
+// Считаем сумму выбранных товаров
+const addonsTotal = selectedProductsResult.rows.reduce(
+  (sum, item) => sum + item.price,
+  0
+);
+
+// Итоговая сумма
+const totalPrice = basePrice + addonsTotal;
 
     // Сохраняем заказ
     const insertOrder = await pool.query(
