@@ -1,10 +1,11 @@
 import { pool } from "../config/db.js";
 
 export const createOrder = async (req, res) => {
+  console.log("BACKEND UPDATED");
   try {
     let { serviceId, products } = req.body;
 
-    if (!serviceId || !products || !products.length) {
+    if (!serviceId || !Array.isArray(products)) {
       return res.status(400).json({ status: "error", message: "Missing serviceId or products" });
     }
 
@@ -26,31 +27,26 @@ export const createOrder = async (req, res) => {
 
     console.log("Query result rows:", selectedProductsResult.rows);
 
-    if (!selectedProductsResult.rows.length) {
-      return res.status(400).json({ status: "error", message: "No valid products for this service" });
+    // Если нет доп-услуг — это нормально
+    const addons = selectedProductsResult.rows || [];
+
+    // Получаем цену услуги
+    const serviceResult = await pool.query(
+      "SELECT price::float AS price FROM services WHERE id = $1",
+      [serviceId]
+    );
+
+    if (!serviceResult.rows.length) {
+      return res.status(400).json({ status: "error", message: "Service not found" });
     }
 
-    // Считаем общую сумму
-    // Получаем цену услуги
-const serviceResult = await pool.query(
-  "SELECT price::float AS price FROM services WHERE id = $1",
-  [serviceId]
-);
+    const basePrice = serviceResult.rows[0].price;
 
-if (!serviceResult.rows.length) {
-  return res.status(400).json({ status: "error", message: "Service not found" });
-}
+    // Считаем сумму выбранных товаров
+    const addonsTotal = addons.reduce((sum, item) => sum + item.price, 0);
 
-const basePrice = serviceResult.rows[0].price;
-
-// Считаем сумму выбранных товаров
-const addonsTotal = selectedProductsResult.rows.reduce(
-  (sum, item) => sum + item.price,
-  0
-);
-
-// Итоговая сумма
-const totalPrice = basePrice + addonsTotal;
+    // Итоговая сумма
+    const totalPrice = basePrice + addonsTotal;
 
     // Сохраняем заказ
     const insertOrder = await pool.query(
@@ -60,7 +56,7 @@ const totalPrice = basePrice + addonsTotal;
     const orderId = insertOrder.rows[0].id;
 
     // Сохраняем товары заказа
-    for (let product of selectedProductsResult.rows) {
+    for (let product of addons) {
       await pool.query(
         "INSERT INTO order_products(order_id, product_id) VALUES($1, $2)",
         [orderId, product.id]
@@ -73,7 +69,7 @@ const totalPrice = basePrice + addonsTotal;
       order: {
         id: orderId,
         serviceId,
-        products: selectedProductsResult.rows,
+        products: addons,
         totalPrice,
         createdAt: insertOrder.rows[0].created_at
       }
