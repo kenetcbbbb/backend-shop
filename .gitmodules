@@ -1,0 +1,3 @@
+[submodule "my-subproject"]
+	path = my-subproject
+	url = https://github.com/kenetcbbbb/codeshop.git
